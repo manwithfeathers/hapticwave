@@ -27,7 +27,7 @@ int FADER_B = 2;
 void setup(){
   MotorA.init(); 
   MotorB.init();
-  Serial.begin(38400); // initiate motors and serial
+  Serial.begin(9600); // initiate motors and serial
   
   noForceBoundLowA = destA - HISTERESIS_NO_FORCE;
   noForceBoundHighA = destA + HISTERESIS_NO_FORCE; // set the range that is acceptable for slider reaching destAination
