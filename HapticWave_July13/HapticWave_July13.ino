@@ -1,4 +1,3 @@
-
 #include <Motor.h>
 
 /* variables for fader A */
@@ -47,7 +46,11 @@ void loop(){
   /* -- send position information to the client -- */
   int dist = analogRead(6); // position on scanner rail
   Serial.println(dist, DEC); 
+<<<<<<< HEAD
  
+=======
+
+>>>>>>> f2eba0826d5f3b46bbb14fb362e9ce88ce5feba5
 
   /* -- read new destination from the client -- */
   if (Serial.available() > 1) {
