@@ -1,3 +1,4 @@
+
 #include <Motor.h>
 
 /* variables for fader A */
@@ -17,9 +18,10 @@ int slopeBoundHighB;
 int slopeBoundLowB;
 
 
+
 int HISTERESIS_NO_FORCE = 1; // set destination range here
-int HISTERESIS_SLOPE = 6;
-int MAX_TORQUE = 300;
+int HISTERESIS_SLOPE = 8;
+int MAX_TORQUE = 250;
 
 int FADER_A = 1;
 int FADER_B = 2;
@@ -44,13 +46,11 @@ void setup(){
 void loop(){
   
   /* -- send position information to the client -- */
-  int dist = analogRead(6); // position on scanner rail
-  Serial.println(dist, DEC); 
-<<<<<<< HEAD
+ int dist = analogRead(6);
+  Serial.print("S");
+ Serial.print(dist, DEC);
+   Serial.print("E");
  
-=======
-
->>>>>>> f2eba0826d5f3b46bbb14fb362e9ce88ce5feba5
 
   /* -- read new destination from the client -- */
   if (Serial.available() > 1) {
