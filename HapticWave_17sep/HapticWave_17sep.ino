@@ -1,9 +1,7 @@
 
 #include <Motor.h>
-//sending
 
-boolean sending = false;
-
+// expects 5 bytes: mode - slider - value - slider - value
 
 //smoothing
 
@@ -52,8 +50,6 @@ void setup(){
 
 }
 
-// 5 byte chunks: mode - fader - int - mode - fader - int
-
 void loop(){
   
   
@@ -66,26 +62,31 @@ void loop(){
       
       case 'b': // standard mode. receives amplitude+moves sliders, sends position
   {
-//sending
+  /* -- send position information to the client -- */
+  // y (n) = y (n-1) + ((x (n) - y (n-1))/slide)
+ int sensorVal = analogRead(6);
+ int smoothedVal = oldVal + ((sensorVal - oldVal)/slide);
+ oldVal = smoothedVal;
 
-boolean sending = true;
+  Serial.print("S");
+ Serial.print(smoothedVal, DEC);
+   Serial.print("E"); // header and footer for the position data
 
 
   /* -- read new destination from the client -- */
-    int fader = Serial.read();// 2nd byte is fader number 
-    if 
+   Serial.read();// 2nd byte is fader number 
       destA = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
       noForceBoundLowA = (destA - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
       noForceBoundHighA = (destA + HISTERESIS_NO_FORCE); // set the range
       slopeBoundHighA = destA + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
       slopeBoundLowA = destA - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
-       
+     Serial.read();
       destB = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
       noForceBoundLowB = (destB - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
       noForceBoundHighB = (destB + HISTERESIS_NO_FORCE); // set the range
       slopeBoundHighB = destB + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
       slopeBoundLowB = destB - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
-    
+    }  
   
  
    /* -- set torque for fader A  -- */  
@@ -116,32 +117,23 @@ boolean sending = true;
    }else {
      MotorB.torque(0); 
    }
-  }
   
 break;
 case'a':// doesn't send position data
 {
-  
-  //sending
-  
- boolean sending = false;
- 
- //faders
-  
-  int fader = Serial.read();// 2nd byte is fader number 
-    if(fader == FADER_A) {
-      destA = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
+  Serial.read();// 2nd byte is fader number , but we know this is 1
+      destA = Serial.read(); //  3rd byte serial input from Max MSP patch, range 0.255. read 1 byte 
       noForceBoundLowA = (destA - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
       noForceBoundHighA = (destA + HISTERESIS_NO_FORCE); // set the range
       slopeBoundHighA = destA + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
       slopeBoundLowA = destA - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
-    }else if(fader == FADER_B){
+    Serial.read();
       destB = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
       noForceBoundLowB = (destB - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
       noForceBoundHighB = (destB + HISTERESIS_NO_FORCE); // set the range
       slopeBoundHighB = destB + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
       slopeBoundLowB = destB - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
-    }  
+    
   
  
    /* -- set torque for fader A  -- */  
@@ -180,22 +172,33 @@ case'a':// doesn't send position data
 break;
 case 'c': // one slider becomes input slider
 {
- //sending
- 
- boolean sending = true;
+  
+  /* send pos data */
+  
+   int sensorVal = analogRead(6);
+ int smoothedVal = oldVal + ((sensorVal - oldVal)/slide);
+ oldVal = smoothedVal;
+
+  Serial.print("S");
+ Serial.print(smoothedVal, DEC);
+   Serial.print("E");
+  
   
   /* fader a still shows data */
   
-    int fader = Serial.read();// 2nd byte is fader number 
+    Serial.read();// 2nd byte is fader number 
       destA = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
       noForceBoundLowA = (destA - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
       noForceBoundHighA = (destA + HISTERESIS_NO_FORCE); // set the range
       slopeBoundHighA = destA + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
       slopeBoundLowA = destA - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
   
+    Serial.read();
+    Serial.read(); // empty serial buffer, discard 2 bytes for fader b
+  
   /* fader b now sends data */
   
-  posB = analogRead((A3)/4);
+  posB = analogRead(A0);
   Serial.print("x");
   Serial.print(posB);
   Serial.print("y");
@@ -207,20 +210,28 @@ case 'c': // one slider becomes input slider
 break;
 case 'd': // one slider becomes toggle
 {
+   /* send pos data */
   
- // sending
- 
- boolean sending = false;
+   int sensorVal = analogRead(6);
+ int smoothedVal = oldVal + ((sensorVal - oldVal)/slide);
+ oldVal = smoothedVal;
+
+  Serial.print("S");
+ Serial.print(smoothedVal, DEC);
+   Serial.print("E");
   
- 
+  
   /* fader a still shows data */
   
-    int fader = Serial.read();// 2nd byte is fader number 
+    Serial.read();// 2nd byte is fader number 
       destA = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
       noForceBoundLowA = (destA - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
       noForceBoundHighA = (destA + HISTERESIS_NO_FORCE); // set the range
       slopeBoundHighA = destA + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
       slopeBoundLowA = destA - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
+      
+      Serial.read();
+      Serial.read(); // empty serial buffer
  
  /* slider b is switch */
  
@@ -239,20 +250,6 @@ case 'd': // one slider becomes toggle
 
     }
 }
-
-//position data
-
-
-
-{if (sending = true) {int sensorVal = analogRead(6);
- int smoothedVal = oldVal + ((sensorVal - oldVal)/slide);
- oldVal = smoothedVal;
-
-  Serial.print("S");
- Serial.print(smoothedVal, DEC);
-   Serial.print("E");}
-}
-
 }
   
  /* caeff > 0  */ 
