@@ -1,0 +1,187 @@
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <Motor.h>
+
+#define ENCODER_CHA_DDR     DDRD
+#define ENCODER_CHA_PORT    PORTD
+#define ENCODER_CHA_PINS    PIND
+#define ENCODER_CHA_PIN     PORTD2
+#define ENCODER_CHA_VECT    INT0_vect
+#define ENCODER_CHB_DDR     DDRD
+#define ENCODER_CHB_PORT    PORTD
+#define ENCODER_CHB_PINS    PIND
+#define ENCODER_CHB_PIN     PORTD3
+#define ENCODER_CHB_VECT    INT1_vect
+#define ENCODER_MAX_POS     2952 /* 500mm/25.4 * 150lpi */
+
+#define ENCODER_DBG_DDR     DDRD
+#define ENCODER_DBG_PORT    PORTD
+#define ENCODER_DBG_PINS    PIND
+#define ENCODER_DBG_PIN     PORTD4
+
+#define ADC_CHANNELS        8
+#define ADC_OVERSAMPLING    4
+
+//smoothing of position data (of slider bed)
+
+float slide = 8;
+volatile int oldVal = 0;
+
+//are we sending bed position data back to computer?
+
+boolean sending = false;
+
+
+
+/* variables for fader B */
+int posB = 0; // position slider B
+int destB; // destination - sample amplitude -sent via serial 
+int noForceBoundLowB; // lower limits of destination range
+int noForceBoundHighB; // upper limits of destination range
+int slopeBoundHighB;
+int slopeBoundLowB;
+
+int HISTERESIS_NO_FORCE = 1; // set destination range here
+int HISTERESIS_SLOPE = 2; // all these just help reduce jitter on the faders
+int MAX_TORQUE = 150; // max torque of motorised faders (limit is 500 i think)
+
+volatile uint16_t encoderPosition = 0;
+
+uint16_t volatile adc_values[ADC_CHANNELS];
+#define getAnalogValue(i) (adc_values[i])
+
+void setupAdc(){
+  ADCSRA |= (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // Set ADC prescaler to 128 - 125KHz sample rate @ 16MHz
+  ADCSRA |= (1 << ADATE); // Set ADC to Free-Running Mode
+  ADCSRA |= (1 << ADEN);  // Enable ADC
+  ADCSRA |= (1 << ADSC);  // Start A2D Conversions
+  ADMUX |= (1 << REFS0); // Set ADC reference to AVCC
+  ADCSRA |= (1 << ADIE); // enable ADC interrupt
+}
+
+void setupEncoder(){
+  EICRA = (1<<ISC10) | (1<<ISC01) | (1<<ISC00); // trigger int0 on rising edge
+  EIMSK =  1<<INT0; // enable INT0
+  ENCODER_CHA_DDR &= ~_BV(ENCODER_CHA_PIN); // set as input
+  ENCODER_CHB_DDR &= ~_BV(ENCODER_CHB_PIN); // set as input
+  ENCODER_DBG_DDR |= _BV(ENCODER_DBG_PIN);  // set as output
+}
+
+void setup(){
+  cli(); // disable interupts
+  setupAdc();
+  setupEncoder();
+  sei(); // enable interrupts
+
+  MotorB.init();
+  //Serial.begin(9600);
+  Serial.begin(115200); // initiate motors and serial 115200
+  
+
+  noForceBoundLowB = destB - HISTERESIS_NO_FORCE;
+  noForceBoundHighB = destB + HISTERESIS_NO_FORCE; 
+  slopeBoundHighB = destB + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
+  slopeBoundLowB = destB - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE;
+}
+
+void loop(){
+
+  
+  /* -- send position information to the client -- */
+  // y (n) = y (n-1) + ((x (n) - y (n-1))/slide)
+  
+  
+
+
+  /* -- read new destination from the client  -- */
+  if (Serial.available() > 2) {
+    char mode =  Serial.read();
+    switch (mode) {
+       case 'd':
+       Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
+       destB = Serial.read(); //   serial input from Max MSP patch, range 0.255. read 1 byte 
+       noForceBoundLowB = (destB - HISTERESIS_NO_FORCE); // set a range for the slider, slider stops when it gets there
+       noForceBoundHighB = (destB + HISTERESIS_NO_FORCE); // set the range
+       slopeBoundHighB = destB + HISTERESIS_NO_FORCE + HISTERESIS_SLOPE;
+       slopeBoundLowB = destB - HISTERESIS_NO_FORCE -  HISTERESIS_SLOPE; 
+       Serial.read();
+       break;
+       case 'a':
+       sending = false;
+       Serial.read();
+       Serial.read();
+       Serial.read();
+       break;
+       case 'b':
+       sending = true;
+       Serial.read();
+       Serial.read();
+       Serial.read();
+    }
+  }
+ 
+
+    
+  
+  posB = 255 - getAnalogValue(1)/16; // rescale position of slider b to be 0-255
+   if (posB < slopeBoundLowB) {
+     MotorB.torque(MAX_TORQUE);
+   } else if (posB > slopeBoundLowB && posB <= noForceBoundLowB) {
+     MotorB.torque(calculateSlope(posB - noForceBoundLowB)); 
+   } else if (posB > slopeBoundHighB){ 
+     MotorB.torque(-MAX_TORQUE);
+   } else if( posB < slopeBoundHighB && posB >= noForceBoundHighB) {
+     MotorB.torque(calculateSlope(posB - noForceBoundHighB)); 
+   }else {
+     MotorB.torque(0); 
+   }
+
+ // print bed position data to serial -- sandwich it between an S and an E 
+ if (sending == true ){
+
+
+   Serial.write(encoderPosition >> 7);
+   Serial.write(encoderPosition % 128);
+   
+   Serial.write(255);
+ } 
+  
+ 
+}
+  
+  // function for slope
+  
+int calculateSlope(int x){
+  int torque = MAX_TORQUE * sqrt(x/(HISTERESIS_SLOPE));
+  return torque;
+}
+
+ISR(ENCODER_CHA_VECT){
+  ENCODER_DBG_PORT |= _BV(ENCODER_DBG_PIN);
+  if((ENCODER_CHB_PINS & _BV(ENCODER_CHB_PIN)) && encoderPosition < ENCODER_MAX_POS)
+    encoderPosition++;
+  else if(encoderPosition > 0)
+    encoderPosition--;
+  ENCODER_DBG_PORT &= ~_BV(ENCODER_DBG_PIN);
+}
+
+ISR(ADC_vect) {
+  static uint8_t oldchan;
+  static uint8_t counter;
+  static uint16_t adc_buffer[ADC_CHANNELS];
+  uint8_t curchan = ADMUX & 7;
+  adc_buffer[oldchan] += ADCL | (ADCH << 8);
+  oldchan = curchan;
+  if(++curchan == ADC_CHANNELS){
+    curchan = 0;
+    if(++counter == ADC_OVERSAMPLING){
+      counter = 0;
+      for(uint8_t i=0; i<ADC_CHANNELS; ++i){
+	adc_values[i] = adc_buffer[i];
+	adc_buffer[i] = 0;
+      }
+    }
+  }
+  ADMUX = (ADMUX & ~7) | curchan;
+}
